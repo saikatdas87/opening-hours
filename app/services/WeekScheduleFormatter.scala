@@ -5,6 +5,7 @@ import java.util.Locale
 
 import com.google.inject.{ImplementedBy, Inject}
 import com.typesafe.config.Config
+import com.typesafe.scalalogging.StrictLogging
 import exception.InvalidInputException
 import models.{HoursSchedule, OpenDuration, WeeklySchedule}
 import play.api.Configuration
@@ -16,14 +17,11 @@ trait WeekScheduleFormatter {
   def formatToHuman(schedule: WeeklySchedule): String
 }
 
-sealed trait WeekSchedulerProcessorException extends Exception
-
-case object MalformedInputException extends WeekSchedulerProcessorException
-
-class WeekScheduleFormatterImpl @Inject()(configuration: Configuration) extends WeekScheduleFormatter {
+class WeekScheduleFormatterImpl @Inject()(configuration: Configuration) extends WeekScheduleFormatter with StrictLogging {
 
   private lazy val applicationConfig: Config = configuration.underlying
-  private lazy final val defaultLocale: String = "en"
+  private val configLocaleKey : String = "locale"
+  private lazy final val defaultLocale: Locale = Locale.ENGLISH
   private lazy val invalidInput = InvalidInputException("Invalid open and close time sequence observed")
 
   override def formatToHuman(schedule: WeeklySchedule): String = {
@@ -37,8 +35,7 @@ class WeekScheduleFormatterImpl @Inject()(configuration: Configuration) extends 
     val groupedRanges = groupSchedules(ranges)
 
     if (groupedRanges.flatten.forall(_.isSuccess)) {
-      val configLocale = applicationConfig.getString("locale")
-      val locale = new Locale(if (configLocale != null && !configLocale.isEmpty) configLocale else defaultLocale)
+      val locale = getLocale
       val weekdays = new DateFormatSymbols(locale).getWeekdays
 
       val weeklyScheduleMap = for {
@@ -49,7 +46,8 @@ class WeekScheduleFormatterImpl @Inject()(configuration: Configuration) extends 
 
       weeklyScheduleMap.toMap
     } else {
-      throw invalidInput
+      //throw invalidInput
+      Map.empty
     }
 
   }
@@ -60,6 +58,8 @@ class WeekScheduleFormatterImpl @Inject()(configuration: Configuration) extends 
       case ranges if ranges.nonEmpty && ranges.head.isClosingTime => (Seq(ranges.head), ranges.tail)
       case ranges => (Seq.empty, ranges)
     }.unzip
+
+    //TODO: - validate dailySchedule seq to check if close time after open
 
     // In some cases when closing time fall next day those times are stored in maybeNextDayClosing
     // Need to left shift this seq so that we can zip close time with previous day
@@ -76,7 +76,8 @@ class WeekScheduleFormatterImpl @Inject()(configuration: Configuration) extends 
       daily.grouped(2).map {
         case Seq(open, close) if open.isOpeningTime && close.isClosingTime =>
           Success(OpenDuration(open.value, close.value))
-        case _ =>
+        case seq =>
+          logger.error("The range is invalid : " + seq)
           Failure(invalidInput)
       }.toVector
     }
@@ -84,4 +85,14 @@ class WeekScheduleFormatterImpl @Inject()(configuration: Configuration) extends 
 
   def rotateSeqLeft[T](seq: Seq[T]): Seq[T] = seq.tail :+ seq.head
 
+  def getLocale: Locale = {
+    try {
+      val configLocale = applicationConfig.getString(configLocaleKey)
+      if (configLocale != null && !configLocale.isEmpty) new Locale(configLocale) else defaultLocale
+    } catch {
+      case _: Exception =>
+        logger.info(s"No Locale config found. Using default locale $defaultLocale for formatting")
+        defaultLocale
+    }
+  }
 }
