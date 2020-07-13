@@ -1,42 +1,45 @@
 package services
 
-import java.text.DateFormatSymbols
+import java.nio.charset.MalformedInputException
 import java.util.Locale
 
-import com.google.inject.{ImplementedBy, Inject}
-import com.typesafe.config.Config
+import com.google.inject.ImplementedBy
 import com.typesafe.scalalogging.StrictLogging
 import exception.InvalidInputException
+import javax.inject.Inject
 import models.{HoursSchedule, OpenDuration, WeeklySchedule}
-import play.api.Configuration
 
 import scala.util.{Failure, Success, Try}
 
 @ImplementedBy(classOf[WeekScheduleFormatterImpl])
 trait WeekScheduleFormatter {
-  def formatToHuman(schedule: WeeklySchedule): String
+  def formatToHuman(schedule: WeeklySchedule)(implicit locale: Locale): String
 }
 
-class WeekScheduleFormatterImpl @Inject()(configuration: Configuration) extends WeekScheduleFormatter with StrictLogging {
+class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndLocaleService) extends WeekScheduleFormatter with StrictLogging {
 
-  private lazy val applicationConfig: Config = configuration.underlying
-  private val configLocaleKey : String = "locale"
-  private lazy final val defaultLocale: Locale = Locale.ENGLISH
   private lazy val invalidInput = InvalidInputException("Invalid open and close time sequence observed")
 
-  override def formatToHuman(schedule: WeeklySchedule): String = {
-    processRange(schedule)
-    "Sample ???"
+  override def formatToHuman(schedule: WeeklySchedule)(implicit locale: Locale): String = {
+    val scheduledRangeMap = processRange(schedule)
+    formatScheduledMapToHumanText(scheduledRangeMap)
   }
 
 
-  private def processRange(schedule: WeeklySchedule): Map[String, Option[Seq[Try[OpenDuration]]]] = {
+  private def processRange(schedule: WeeklySchedule)(implicit locale: Locale): Map[String, Option[Seq[OpenDuration]]] = {
     val ranges = orderInputToSortedDailySchedules(schedule)
-    val groupedRanges = groupSchedules(ranges)
+    val rawGroupedRanges = groupSchedules(ranges)
 
-    if (groupedRanges.flatten.forall(_.isSuccess)) {
-      val locale = getLocale
-      val weekdays = new DateFormatSymbols(locale).getWeekdays
+    if (rawGroupedRanges.flatten.forall(_.isSuccess)) {
+      val groupedRanges = for {
+        dailyRanges <- rawGroupedRanges
+      } yield {
+        dailyRanges.collect({
+          case Success(range) => range
+        })
+      }
+
+      val weekdays = dateTimeAndLocaleService.getLocaleWeekDays
 
       val weeklyScheduleMap = for {
         (dailyOpenDurations, index) <- groupedRanges.zipWithIndex
@@ -46,15 +49,14 @@ class WeekScheduleFormatterImpl @Inject()(configuration: Configuration) extends 
 
       weeklyScheduleMap.toMap
     } else {
-      //throw invalidInput
-      Map.empty
+      throw InvalidInputException("One or more range pairs in input are invalid")
     }
 
   }
 
 
   private def orderInputToSortedDailySchedules(schedule: WeeklySchedule): Seq[(Seq[HoursSchedule], Seq[HoursSchedule])] = {
-    val (maybeNextDayClosing, dailySchedule) = schedule.sortedDays.map(_.getOrElse(Seq.empty)).map {
+    val (maybeNextDayClosing, rawDailySchedule) = schedule.sortedDays.map(_.getOrElse(Seq.empty)).map {
       case ranges if ranges.nonEmpty && ranges.head.isClosingTime => (Seq(ranges.head), ranges.tail)
       case ranges => (Seq.empty, ranges)
     }.unzip
@@ -66,7 +68,7 @@ class WeekScheduleFormatterImpl @Inject()(configuration: Configuration) extends 
     // Here problem is if the closing time not in next day but next to next.What happens then ? We need to redesign input maybe.
     val rearrangedPrevDayClosingSeq = rotateSeqLeft(maybeNextDayClosing)
 
-    dailySchedule.zip(rearrangedPrevDayClosingSeq)
+    rawDailySchedule.zip(rearrangedPrevDayClosingSeq)
   }
 
   private def groupSchedules(rangeTuples: Seq[(Seq[HoursSchedule], Seq[HoursSchedule])]): Seq[Seq[Try[OpenDuration]]] = {
@@ -83,16 +85,25 @@ class WeekScheduleFormatterImpl @Inject()(configuration: Configuration) extends 
     }
   }
 
-  def rotateSeqLeft[T](seq: Seq[T]): Seq[T] = seq.tail :+ seq.head
+  def rotateSeqLeft[T](seq: Seq[T]): Seq[T] = if (seq.nonEmpty) seq.tail :+ seq.head else seq
 
-  def getLocale: Locale = {
-    try {
-      val configLocale = applicationConfig.getString(configLocaleKey)
-      if (configLocale != null && !configLocale.isEmpty) new Locale(configLocale) else defaultLocale
-    } catch {
-      case _: Exception =>
-        logger.info(s"No Locale config found. Using default locale $defaultLocale for formatting")
-        defaultLocale
+  private def formatScheduledMapToHumanText(schedules: Map[String, Option[Seq[OpenDuration]]])(implicit locale: Locale): String = {
+    val weekdays = dateTimeAndLocaleService.getLocaleWeekDays
+    val humanString = for {
+      day <- weekdays.drop(2) :+ weekdays(1) if schedules.contains(day) // Starting from Monday
+      maybeOpenHours <- schedules.get(day)
+    } yield {
+      day + ": " + {
+        maybeOpenHours match {
+          case Some(openHours) =>
+            openHours.map { range =>
+              s"${dateTimeAndLocaleService.unixTimeToHuman(range.start)} - ${dateTimeAndLocaleService.unixTimeToHuman(range.end)}"
+            }.mkString(", ")
+          case None => "Closed"
+        }
+      }
     }
+    humanString.mkString("\n")
   }
+
 }
