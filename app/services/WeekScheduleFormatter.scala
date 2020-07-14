@@ -22,12 +22,8 @@ class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndL
   private lazy val invalidInput = InvalidInputException("Invalid open and close time sequence observed")
 
   override def formatToHuman(schedule: WeeklySchedule)(implicit locale: Locale): String = {
-    try {
-      val scheduledRangeMap = processRange(schedule)
-      formatScheduledMapToHumanText(scheduledRangeMap)
-    } catch {
-      case e: InvalidInputException => throw InvalidInputException(e.getMessage)
-    }
+    val scheduledRangeMap = processRange(schedule)
+    formatScheduledMapToHumanText(scheduledRangeMap)
   }
 
 
@@ -52,7 +48,8 @@ class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndL
 
       weeklyScheduleMap.toMap
     } else {
-      throw InvalidInputException("One or more range pairs in input are invalid")
+      logger.error("Error occurred while processing raw input")
+      throw InvalidInputException("One or more range pairs (type or value) in input are invalid")
     }
 
   }
@@ -88,7 +85,7 @@ class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndL
         case Seq(open, close) if open.isOpeningTime && close.isClosingTime =>
           Success(OpenDuration(open.value, close.value))
         case seq =>
-          logger.error("The range is invalid : " + seq)
+          logger.error("The range/ranges is/are invalid : " + seq)
           Failure(invalidInput)
       }.toVector
     }

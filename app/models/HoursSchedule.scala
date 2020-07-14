@@ -12,13 +12,14 @@ case class HoursSchedule(
 
 object HoursSchedule {
   implicit val hoursScheduleFormat: OFormat[HoursSchedule] = Json.format[HoursSchedule]
+  /*implicit val locationReads: Reads[HoursSchedule] =
+    (JsPath \ "type").read[String].and((JsPath \ "value").read[Int])(HoursSchedule.apply _)*/
 }
 
 object Status extends Enumeration {
   val open: Value = Value
   val close: Value = Value
 }
-
 
 case class OpenDuration(
                        start: Int,

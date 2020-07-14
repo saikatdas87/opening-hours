@@ -26,13 +26,11 @@ class OpenHoursScheduleValidatorImpl extends OpenHoursScheduleValidator {
   }
 
   def validateRangePairs(ranges: Seq[HoursSchedule]): Unit = {
-    if (ranges.length % 2 != 0)
-      throw InvalidInputException("one or more schedules are not in pair of open, close")
-
     ranges.grouped(2) foreach {
-      case Seq(start, end) =>
+      case Seq(start, end) if start.isOpeningTime && end.isClosingTime =>
         if (!isClosingTimeAfterOpen(end.value, start.value))
           throw InvalidInputException(s"Closing time is before for this pair : open=${start.value}, close=${end.value}")
+      case _ => ()
     }
   }
 
