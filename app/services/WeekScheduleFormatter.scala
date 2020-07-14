@@ -1,6 +1,5 @@
 package services
 
-import java.nio.charset.MalformedInputException
 import java.util.Locale
 
 import com.google.inject.ImplementedBy
@@ -8,6 +7,7 @@ import com.typesafe.scalalogging.StrictLogging
 import exception.InvalidInputException
 import javax.inject.Inject
 import models.{HoursSchedule, OpenDuration, WeeklySchedule}
+import validations.OpenHoursScheduleValidator
 
 import scala.util.{Failure, Success, Try}
 
@@ -16,17 +16,23 @@ trait WeekScheduleFormatter {
   def formatToHuman(schedule: WeeklySchedule)(implicit locale: Locale): String
 }
 
-class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndLocaleService) extends WeekScheduleFormatter with StrictLogging {
+class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndLocaleService,
+                                          validator: OpenHoursScheduleValidator) extends WeekScheduleFormatter with StrictLogging {
 
   private lazy val invalidInput = InvalidInputException("Invalid open and close time sequence observed")
 
   override def formatToHuman(schedule: WeeklySchedule)(implicit locale: Locale): String = {
-    val scheduledRangeMap = processRange(schedule)
-    formatScheduledMapToHumanText(scheduledRangeMap)
+    try {
+      val scheduledRangeMap = processRange(schedule)
+      formatScheduledMapToHumanText(scheduledRangeMap)
+    } catch {
+      case e: InvalidInputException => throw InvalidInputException(e.getMessage)
+    }
   }
 
 
   private def processRange(schedule: WeeklySchedule)(implicit locale: Locale): Map[String, Option[Seq[OpenDuration]]] = {
+    validator.validateTime(schedule)
     val ranges = orderInputToSortedDailySchedules(schedule)
     val rawGroupedRanges = groupSchedules(ranges)
 
@@ -34,13 +40,10 @@ class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndL
       val groupedRanges = for {
         dailyRanges <- rawGroupedRanges
       } yield {
-        dailyRanges.collect({
-          case Success(range) => range
-        })
+        dailyRanges.collect({ case Success(range) => range })
       }
 
       val weekdays = dateTimeAndLocaleService.getLocaleWeekDays
-
       val weeklyScheduleMap = for {
         (dailyOpenDurations, index) <- groupedRanges.zipWithIndex
       } yield {
@@ -56,19 +59,25 @@ class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndL
 
 
   private def orderInputToSortedDailySchedules(schedule: WeeklySchedule): Seq[(Seq[HoursSchedule], Seq[HoursSchedule])] = {
-    val (maybeNextDayClosing, rawDailySchedule) = schedule.sortedDays.map(_.getOrElse(Seq.empty)).map {
-      case ranges if ranges.nonEmpty && ranges.head.isClosingTime => (Seq(ranges.head), ranges.tail)
-      case ranges => (Seq.empty, ranges)
+    val (nextDayClosingHours, rawDailySchedules) = schedule.sortedDays.map(_.getOrElse(Seq.empty)).map {
+      case ranges if ranges.nonEmpty && ranges.head.isClosingTime =>
+        // Validation each day ranges are proper :
+        // 1. Schedules for every has pair of open, close
+        // 2. closing time after open
+        validator.validateRangePairs(ranges.tail)
+        // validate order of ranges are correct
+        validator.validateTimesAreInOrder(ranges.tail)
+        (Seq(ranges.head), ranges.tail)
+      case ranges =>
+        (Seq.empty, ranges)
     }.unzip
-
-    //TODO: - validate dailySchedule seq to check if close time after open
 
     // In some cases when closing time fall next day those times are stored in maybeNextDayClosing
     // Need to left shift this seq so that we can zip close time with previous day
     // Here problem is if the closing time not in next day but next to next.What happens then ? We need to redesign input maybe.
-    val rearrangedPrevDayClosingSeq = rotateSeqLeft(maybeNextDayClosing)
+    val rearrangedPrevDayClosingSeq = rotateSeqLeft(nextDayClosingHours)
 
-    rawDailySchedule.zip(rearrangedPrevDayClosingSeq)
+    rawDailySchedules.zip(rearrangedPrevDayClosingSeq)
   }
 
   private def groupSchedules(rangeTuples: Seq[(Seq[HoursSchedule], Seq[HoursSchedule])]): Seq[Seq[Try[OpenDuration]]] = {
