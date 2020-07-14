@@ -21,14 +21,12 @@ class OpeningHoursController @Inject()(cc: ControllerComponents,
 
   implicit val locale: Locale = dateTimeAndLocaleService.getLocale
 
-  def convertToHumanReadableText: Action[JsValue] = Action(parse.json) { request =>
+  def convertToHumanReadableText: Action[JsValue] = Action(parse.tolerantJson) { request =>
     request.body.validate[WeeklySchedule].fold(error => BadRequest("Input could not be parsed : " + error), {
       schedule =>
-        val openDurationsInHumanText = Try {
+        Try {
           formatter.formatToHuman(schedule)
-        }
-
-        openDurationsInHumanText match {
+        } match {
           case Success(humanReadable) =>
             logger.debug("Successfully transformed to human readable text ")
             Ok(humanReadable)
@@ -36,8 +34,6 @@ class OpeningHoursController @Inject()(cc: ControllerComponents,
             logger.error("Exception occurred : " + exception)
             BadRequest(exception.getMessage)
         }
-
     })
-
   }
 }
