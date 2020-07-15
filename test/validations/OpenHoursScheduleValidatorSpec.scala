@@ -111,4 +111,13 @@ class OpenHoursScheduleValidatorSpec extends PlaySpec with GuiceOneAppPerTest wi
     }
   }
 
+  "Should allow empty ranges" in {
+    try {
+      validator.validateRangePairs(Seq.empty[HoursSchedule])
+      assertTrue(true)
+    } catch {
+      case e: InvalidInputException => fail("Should not have failed with exception : " + e)
+    }
+  }
+
 }
