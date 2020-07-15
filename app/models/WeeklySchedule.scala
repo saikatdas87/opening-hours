@@ -15,5 +15,5 @@ case class WeeklySchedule(
 }
 
 object WeeklySchedule {
-  implicit val productFormat: OFormat[WeeklySchedule] = Json.format[WeeklySchedule]
+  implicit val weeklyScheduleFormat: OFormat[WeeklySchedule] = Json.format[WeeklySchedule]
 }

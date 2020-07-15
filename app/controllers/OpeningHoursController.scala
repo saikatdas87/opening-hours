@@ -19,12 +19,12 @@ class OpeningHoursController @Inject()(cc: ControllerComponents,
                                        dateTimeAndLocaleService: DateTimeAndLocaleService)(implicit ec: ExecutionContext)
   extends AbstractController(cc) with StrictLogging {
 
-  implicit val locale: Locale = dateTimeAndLocaleService.getLocale
 
   def convertToHumanReadableText: Action[JsValue] = Action(parse.tolerantJson) { request =>
     request.body.validate[WeeklySchedule].fold(error => BadRequest("Input could not be parsed : " + error), {
       schedule =>
         Try {
+          implicit val locale: Locale = dateTimeAndLocaleService.getLocale
           formatter.formatToHuman(schedule)
         } match {
           case Success(humanReadable) =>

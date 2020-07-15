@@ -21,6 +21,8 @@ class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndL
 
   private lazy val invalidInput = InvalidInputException("Invalid open and close time sequence observed")
 
+  private def rotateSeqLeft[T](seq: Seq[T]): Seq[T] = if (seq.nonEmpty) seq.tail :+ seq.head else seq
+
   override def formatToHuman(schedule: WeeklySchedule)(implicit locale: Locale): String = {
     val scheduledRangeMap = processRange(schedule)
     formatScheduledMapToHumanText(scheduledRangeMap)
@@ -51,7 +53,6 @@ class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndL
       logger.error("Error occurred while processing raw input")
       throw InvalidInputException("One or more range pairs (type or value) in input are invalid")
     }
-
   }
 
 
@@ -90,8 +91,6 @@ class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndL
       }.toVector
     }
   }
-
-  def rotateSeqLeft[T](seq: Seq[T]): Seq[T] = if (seq.nonEmpty) seq.tail :+ seq.head else seq
 
   private def formatScheduledMapToHumanText(schedules: Map[String, Option[Seq[OpenDuration]]])(implicit locale: Locale): String = {
     val weekdays = dateTimeAndLocaleService.getLocaleWeekDays
