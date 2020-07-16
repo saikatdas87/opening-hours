@@ -39,7 +39,8 @@ class DateTimeAndLocaleServiceImpl @Inject()(configuration: Configuration) exten
   }
 
   def getLocaleWeekDays(implicit locale: Locale): Array[String] = {
-    new DateFormatSymbols(locale).getWeekdays
+    val useLocale = if (null != locale) locale else Locale.ENGLISH
+    new DateFormatSymbols(useLocale).getWeekdays
   }
 
   def unixTimeToHuman(unixTime: Int)(implicit locale: Locale): String = {

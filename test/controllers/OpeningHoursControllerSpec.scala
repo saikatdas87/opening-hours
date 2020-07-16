@@ -72,6 +72,13 @@ class OpeningHoursControllerSpec extends PlaySpec with GuiceOneAppPerTest with I
       status(res) must equal(BAD_REQUEST)
     }
 
+    "returns BadRequest in case of any runtime Exception" in {
+      when(formatter.formatToHuman(schedule)) thenAnswer (_ => new RuntimeException("Some exception"))
+      val res = controller.convertToHumanReadableText()(FakeRequest().withBody(Json.toJson(schedule)))
+
+      status(res) must equal(BAD_REQUEST)
+    }
+
     "Returns BadRequest if input is not parsable " in {
       val res = controller.convertToHumanReadableText()(FakeRequest().withBody(Json.toJson("""{"rowsDeleted":1}""")))
 

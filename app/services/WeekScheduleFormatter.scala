@@ -78,15 +78,17 @@ class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndL
     rawDailySchedules.zip(rearrangedPrevDayClosingSeq)
   }
 
-  private def groupSchedules(rangeTuples: Seq[(Seq[HoursSchedule], Seq[HoursSchedule])]): Seq[Seq[Try[OpenDuration]]] = {
+  private def groupSchedules(rangeWithMaybeNextDayClosingTuples: Seq[(Seq[HoursSchedule], Seq[HoursSchedule])]): Seq[Seq[Try[OpenDuration]]] = {
     for {
-      daily <- rangeTuples.map(pair => pair._1 ++ pair._2)
+      dailyRanges <- rangeWithMaybeNextDayClosingTuples.map(pair => pair._1 ++ pair._2)
     } yield {
-      daily.grouped(2).map {
+      dailyRanges.grouped(2).map {
         case Seq(open, close) if open.isOpeningTime && close.isClosingTime =>
           Success(OpenDuration(open.value, close.value))
         case seq =>
           logger.error("The range/ranges is/are invalid : " + seq)
+          // We can throw exception here but if we want to recover still and show valid
+          // hours for correct inputs then we can still do with this approach
           Failure(invalidInput)
       }.toVector
     }

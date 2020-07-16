@@ -21,7 +21,7 @@ class OpeningHoursController @Inject()(cc: ControllerComponents,
 
 
   def convertToHumanReadableText: Action[JsValue] = Action(parse.tolerantJson) { request =>
-    request.body.validate[WeeklySchedule].fold(error => BadRequest("Input could not be parsed : " + error), {
+    request.body.validate[WeeklySchedule].fold(error => BadRequest("Invalid input, could not be parsed : " + error), {
       schedule =>
         Try {
           implicit val locale: Locale = dateTimeAndLocaleService.getLocale
