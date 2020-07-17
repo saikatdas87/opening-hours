@@ -1,7 +1,6 @@
 package models
 
 import play.api.libs.json.{Json, OFormat}
-
 case class WeeklySchedule(
                            monday: Option[Seq[HoursSchedule]],
                            tuesday: Option[Seq[HoursSchedule]],
@@ -12,8 +11,9 @@ case class WeeklySchedule(
                            sunday: Option[Seq[HoursSchedule]]
                          ) {
   def sortedDays = Seq(monday, tuesday, wednesday, thursday, friday, saturday, sunday)
+
 }
 
 object WeeklySchedule {
-  implicit val productFormat: OFormat[WeeklySchedule] = Json.format[WeeklySchedule]
+  implicit val weeklyScheduleFormat: OFormat[WeeklySchedule] = Json.format[WeeklySchedule]
 }
