@@ -13,7 +13,7 @@ import scala.util.{Failure, Success, Try}
 
 @ImplementedBy(classOf[WeekScheduleFormatterImpl])
 trait WeekScheduleFormatter {
-  def formatToHuman(schedule: WeeklySchedule)(implicit locale: Locale): String
+  def processRangeToRawScheduleMap(schedule: WeeklySchedule)(implicit locale: Locale): Map[String, Option[Seq[Try[OpenDuration]]]]
 }
 
 class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndLocaleService,
@@ -23,48 +23,26 @@ class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndL
 
   private def rotateSeqLeft[T](seq: Seq[T]): Seq[T] = if (seq.nonEmpty) seq.tail :+ seq.head else seq
 
-  override def formatToHuman(schedule: WeeklySchedule)(implicit locale: Locale): String = {
-    val scheduledRangeMap = processRange(schedule)
-    formatScheduledMapToHumanText(scheduledRangeMap)
-  }
-
-
-  private def processRange(schedule: WeeklySchedule)(implicit locale: Locale): Map[String, Option[Seq[OpenDuration]]] = {
+  def processRangeToRawScheduleMap(schedule: WeeklySchedule)(implicit locale: Locale): Map[String, Option[Seq[Try[OpenDuration]]]] = {
     validator.validateTime(schedule)
+
     val ranges = orderInputToSortedDailySchedules(schedule)
     val rawGroupedRanges = groupSchedules(ranges)
 
-    if (rawGroupedRanges.flatten.forall(_.isSuccess)) {
-      val groupedRanges = for {
-        dailyRanges <- rawGroupedRanges
-      } yield {
-        dailyRanges.collect({ case Success(range) => range })
-      }
-
-      val weekdays = dateTimeAndLocaleService.getLocaleWeekDays
-      val weeklyScheduleMap = for {
-        (dailyOpenDurations, index) <- groupedRanges.zipWithIndex
-      } yield {
-        weekdays((index + 1) % 7 + 1) -> (if (dailyOpenDurations.nonEmpty) Some(dailyOpenDurations) else None)
-      }
-
-      weeklyScheduleMap.toMap
-    } else {
-      logger.error("Error occurred while processing raw input")
-      throw InvalidInputException("One or more range pairs (type or value) in input are invalid")
+    val weekdays = dateTimeAndLocaleService.getLocaleWeekDays
+    val weeklyScheduleMap = for {
+      (dailyOpenDurations, index) <- rawGroupedRanges.zipWithIndex
+    } yield {
+      weekdays((index + 1) % 7 + 1) -> (if (dailyOpenDurations.nonEmpty) Some(dailyOpenDurations) else None)
     }
+
+    weeklyScheduleMap.toMap
   }
 
 
   private def orderInputToSortedDailySchedules(schedule: WeeklySchedule): Seq[(Seq[HoursSchedule], Seq[HoursSchedule])] = {
     val (nextDayClosingHours, rawDailySchedules) = schedule.sortedDays.map(_.getOrElse(Seq.empty)).map {
       case ranges if ranges.nonEmpty && ranges.head.isClosingTime =>
-        // Validation each day ranges are proper :
-        // 1. Schedules for every has pair of open, close
-        // 2. closing time after open
-        validator.validateRangePairs(ranges.tail)
-        // validate order of ranges are correct
-        validator.validateTimesAreInOrder(ranges.tail)
         (Seq(ranges.head), ranges.tail)
       case ranges =>
         (Seq.empty, ranges)
@@ -92,25 +70,6 @@ class WeekScheduleFormatterImpl @Inject()(dateTimeAndLocaleService: DateTimeAndL
           Failure(invalidInput)
       }.toVector
     }
-  }
-
-  private def formatScheduledMapToHumanText(schedules: Map[String, Option[Seq[OpenDuration]]])(implicit locale: Locale): String = {
-    val weekdays = dateTimeAndLocaleService.getLocaleWeekDays
-    val humanString = for {
-      day <- weekdays.drop(2) :+ weekdays(1) if schedules.contains(day) // Starting from Monday
-      maybeOpenHours <- schedules.get(day)
-    } yield {
-      day + ": " + {
-        maybeOpenHours match {
-          case Some(openHours) =>
-            openHours.map { range =>
-              s"${dateTimeAndLocaleService.unixTimeToHuman(range.start)} - ${dateTimeAndLocaleService.unixTimeToHuman(range.end)}"
-            }.mkString(", ")
-          case None => "Closed"
-        }
-      }
-    }
-    humanString.mkString("\n")
   }
 
 }

@@ -24,7 +24,6 @@ class OpenHoursScheduleValidatorSpec extends PlaySpec with GuiceOneAppPerTest wi
     HoursSchedule("open", 16000), HoursSchedule("close", 20000))
   private val orderedRange = Seq(HoursSchedule("open", 3600), HoursSchedule("close", 18000),
     HoursSchedule("open", 19000), HoursSchedule("close", 20000))
-  private val closedBeforeOpen = Seq(HoursSchedule("open", 3600), HoursSchedule("close", 0))
 
   "validateTime()" should {
 
@@ -64,7 +63,7 @@ class OpenHoursScheduleValidatorSpec extends PlaySpec with GuiceOneAppPerTest wi
         validator.validateTimesAreInOrder(unorderedRange)
         fail("Should not have succeeded")
       } catch {
-        case e: InvalidInputException => e.getMessage must equal("One (or maybe more) opening closing hours are not in order for a particular day")
+        case e: InvalidInputException => e.getMessage must equal("One (or maybe more) opening closing hours are not in order for a one or more day(s)")
       }
     }
 
@@ -75,48 +74,6 @@ class OpenHoursScheduleValidatorSpec extends PlaySpec with GuiceOneAppPerTest wi
       } catch {
         case e: InvalidInputException => fail("Should not have failed with exception : " + e)
       }
-    }
-  }
-
-
-  "validateRangePairs" should {
-
-    "Throw exception if range pairs have overlapping times" in {
-      try {
-        validator.validateRangePairs(closedBeforeOpen)
-        fail("Should not have succeeded")
-      } catch {
-        case e: InvalidInputException =>
-          e.getMessage must equal("Closing time is before for this pair : open=3600, close=0")
-      }
-    }
-
-  }
-
-  "Should allow if only open time defined" in {
-    try {
-      validator.validateRangePairs(Seq(HoursSchedule("open", 3600)))
-      assertTrue(true)
-    } catch {
-      case e: InvalidInputException => fail("Should not have failed with exception : " + e)
-    }
-  }
-
-  "Should allow valid ranges" in {
-    try {
-      validator.validateRangePairs(orderedRange)
-      assertTrue(true)
-    } catch {
-      case e: InvalidInputException => fail("Should not have failed with exception : " + e)
-    }
-  }
-
-  "Should allow empty ranges" in {
-    try {
-      validator.validateRangePairs(Seq.empty[HoursSchedule])
-      assertTrue(true)
-    } catch {
-      case e: InvalidInputException => fail("Should not have failed with exception : " + e)
     }
   }
 

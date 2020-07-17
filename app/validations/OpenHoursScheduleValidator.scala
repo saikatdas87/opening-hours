@@ -2,7 +2,9 @@ package validations
 
 import com.google.inject.ImplementedBy
 import exception.InvalidInputException
-import models.{HoursSchedule, WeeklySchedule}
+import models.{HoursSchedule, OpenDuration, WeeklySchedule}
+
+import scala.util.Try
 
 @ImplementedBy(classOf[OpenHoursScheduleValidatorImpl])
 trait OpenHoursScheduleValidator {
@@ -10,28 +12,17 @@ trait OpenHoursScheduleValidator {
 
   def validateTimesAreInOrder(ranges: Seq[HoursSchedule]): Unit
 
-  def validateRangePairs(ranges: Seq[HoursSchedule]): Unit
+  def validateParsedRawData(rawParsed: Iterable[Option[Seq[Try[OpenDuration]]]]): Unit
 }
 
 class OpenHoursScheduleValidatorImpl extends OpenHoursScheduleValidator {
 
   private val validTimeRange = 0 to 86399
 
-  private def isClosingTimeAfterOpen(closingTime: Int, openingTime: Int): Boolean = closingTime > openingTime
-
   private def isSorted[T](s: Seq[T])(implicit ord: Ordering[T]): Boolean = s match {
     case Seq() => true
     case Seq(_) => true
     case _ => s.sliding(2).forall { case Seq(prev, next) => ord.lt(prev, next) }
-  }
-
-  def validateRangePairs(ranges: Seq[HoursSchedule]): Unit = {
-    ranges.grouped(2) foreach {
-      case Seq(start, end) if start.isOpeningTime && end.isClosingTime =>
-        if (!isClosingTimeAfterOpen(end.value, start.value))
-          throw InvalidInputException(s"Closing time is before for this pair : open=${start.value}, close=${end.value}")
-      case _ => ()
-    }
   }
 
   def validateTime(rawInput: WeeklySchedule): Unit = {
@@ -46,8 +37,13 @@ class OpenHoursScheduleValidatorImpl extends OpenHoursScheduleValidator {
 
   def validateTimesAreInOrder(ranges: Seq[HoursSchedule]): Unit = {
     val times = ranges.map(_.value)
-    if (!isSorted(times)) throw InvalidInputException("One (or maybe more) opening closing hours are not in order for a particular day")
+    if (!isSorted(times)) throw InvalidInputException("One (or maybe more) opening closing hours are not in order for a one or more day(s)")
   }
 
+
+  def validateParsedRawData(rawParsed: Iterable[Option[Seq[Try[OpenDuration]]]]): Unit = {
+    if (!rawParsed.flatten.flatten.forall(_.isSuccess))
+      throw InvalidInputException("One (or maybe more) range pairs(close & open) are invalid")
+  }
 
 }
