@@ -124,7 +124,7 @@ To access the application at http://localhost:9000/opening-hours/toHuman then pl
 ```
 ├── /app/                                       # The backend source (controllers, models, services)
 │     └── /controllers/                         # Backend controllers
-│           └── OpeningHoursController.scala    # Asset controller wrapper serving frontend assets and artifacts
+│           └── OpeningHoursController.scala    # Controller to process data and send back in a readable format
 │         /models/*                             # Contains all models used in application
 │         /services/*                           # Contains all services including data presentaion and preparation logics
 │         /validations/*                        # Contains all validation related functions
